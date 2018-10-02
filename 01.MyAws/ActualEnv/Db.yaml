@@ -1,0 +1,276 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: DB Cluster, Instance, ParameterGroup, DBSubnet
+################### Metadata ###################
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: "The size of the environment decides the size of db and ec2 instances"
+        Parameters:
+          - EnvironmentSize
+      - Label:
+          default: "admin user name and password"
+        Parameters:
+          - DBUsername
+          - DBPassword
+    ParameterLabels:
+      DBAllocatedStorage:
+        default: DB Allocated Storage
+      DBSnapshotName:
+        default: DB Snapshot Name
+################### Parameters ###################
+Parameters:
+  EnvironmentSize:
+    Type: String
+    Default: SMALL
+    AllowedValues:
+      - SMALL
+      - MEDIUM
+      - LARGE
+    Description: Instance Sizes for EC2 and DB
+  DBUsername:
+    Default: iamadmin
+    Description: The database master account username
+    Type: String
+    MinLength: 1
+    MaxLength: 16
+    AllowedPattern: "[a-zA-Z][a-zA-Z0-9]*"
+    ConstraintDescription: must begin with a letter and contain only alphanumeric
+      characters.
+  DBPassword:
+    Description: Password of RDS master password
+    Type: String
+    NoEcho: TRUE
+    MinLength: 4
+  DatabaseName:
+    Type: String
+    Description: The name of the automatically created database
+    Default: mydatabase
+    MinLength: 1
+    MaxLength: 64
+    AllowedPattern: "[a-zA-Z][a-zA-Z0-9]*"
+  DBAllocatedStorage:
+    Default: 20
+    Description: DB instance disk size
+    Type: Number
+  DBSnapshotName:
+    Default: ''
+    Description: The name of a DB snapshot (optional)
+    Type: String
+################### Conditions ###################
+Conditions:
+  UseDBSnapshot:
+    !Not [!Equals [!Ref DBSnapshotName, ""]]
+  isLarge:
+    !Equals [!Ref EnvironmentSize, LARGE]
+  isntLarge:
+    !Not [!Equals [!Ref EnvironmentSize, LARGE]]
+################### Mappings ###################
+Mappings:
+  EnvSize:
+    SMALL:
+      MyEC2: t2.micro
+      DB: db.t2.micro
+    MEDIUM:
+      MyEC2: t2.small
+      DB: db.t2.small
+    LARGE:
+      MyEC2: t2.medium
+      DB: db.t2.medium
+  StackConfig:
+    DBSubnetA:
+      CIDR: 10.0.200.0/24
+      AZ: ap-northeast-1a
+    DBSubnetC:
+      CIDR: 10.0.201.0/24
+      AZ: ap-northeast-1c
+################### Resources ###################
+Resources:
+################### SecurityGroup
+  MySQLSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: !ImportValue Vpc-MyVpc
+      GroupDescription: RDS that accept mysql access
+      Tags:
+      - Key: Name
+        Value: MySQLSg
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          SourceSecurityGroupId: !ImportValue PrivateSgEc2-WebToDbSg
+          Description: Inbound from Web servers with mysql
+
+################### RecordSet
+  DBClusterRecord:
+    Condition: isLarge
+    Type: AWS::Route53::RecordSetGroup
+    Properties:
+      HostedZoneId: !ImportValue CommonResources-MyPrivateHostedZone
+      Comment: CNAME for the DBCluster endpoint.
+      RecordSets:
+        - Name: mycluster.local.com.
+          Type: CNAME
+          TTL: 300
+          ResourceRecords:
+            - !GetAtt DBCluster.Endpoint.Address
+  DBClusterReadOnlyRecord:
+    Condition: isLarge
+    Type: AWS::Route53::RecordSetGroup
+    Properties:
+      HostedZoneId: !ImportValue CommonResources-MyPrivateHostedZone
+      Comment: CNAME for the DBCluster ReadEndpoint.
+      RecordSets:
+        - Name: mycluster-ro.local.com.
+          Type: CNAME
+          TTL: 300
+          ResourceRecords:
+            - !GetAtt DBCluster.ReadEndpoint.Address
+  DBInstanceRecord:
+    Condition: isntLarge
+    Type: AWS::Route53::RecordSetGroup
+    Properties:
+      HostedZoneId: !ImportValue CommonResources-MyPrivateHostedZone
+      Comment: CNAME for the DBInstance.
+      RecordSets:
+        - Name: mydbinstance.local.com.
+          Type: CNAME
+          TTL: 300
+          ResourceRecords:
+            - !GetAtt DBInstance.Endpoint.Address
+################### DBCluster
+  DBCluster:
+    Condition: isLarge
+    DeletionPolicy: Snapshot
+    Type: AWS::RDS::DBCluster
+    Properties:
+      DBClusterIdentifier: cluster-a
+      Engine: aurora
+      EngineVersion: 5.7.22
+      LicenseModel: general-public-license
+      AvailabilityZones:
+        - !FindInMap [ StackConfig, DBSubnetA, AZ ]
+        - !FindInMap [ StackConfig, DBSubnetC, AZ ]
+      BackupRetentionPeriod: 1
+      PreferredBackupWindow: 19:00-19:30
+      PreferredMaintenanceWindow: sat:20:00-sat:20:30
+      MasterUsername: !Ref DBUsername
+      MasterUserPassword: !Ref DBPassword
+      DBSubnetGroupName: !Ref DBSubnetGroup
+      DBClusterParameterGroupName: !Ref DBClusterParameterGroup
+      SnapshotIdentifier: !If [ UseDBSnapshot, !Ref DBSnapshotName, !Ref "AWS::NoValue" ]
+      ############# Read Replica need this
+      # ARN for MySQL DB instance or DB Cluster
+      # ReplicationSourceIdentifier: EEEEEEEEEEEEE
+################### DBClusterParameterGroup
+  DBClusterParameterGroup:
+    Condition: isLarge
+    Type: AWS::RDS::DBClusterParameterGroup
+    Properties:
+      Description: ""
+      Family: aurora5.6
+      Parameters:
+        time_zone: US/Eastern
+################### DBInstance
+  DBInstanceForAurora:
+    Condition: isLarge
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: Snapshot
+    Properties:
+      DBInstanceIdentifier: instance-aurora-a
+      DBInstanceClass: !FindInMap [EnvSize, !Ref EnvironmentSize, DB]
+      Engine: mysql
+      EngineVersion: 5.7.22
+      LicenseModel: general-public-license
+      AutoMinorVersionUpgrade: FALSE
+      DBName: !If [UseDBSnapshot, !Ref "AWS::NoValue", !Ref DatabaseName]
+      DBSubnetGroupName: !Ref DBSubnetGroup
+      DBParameterGroupName: !Ref DBParamGroup
+      DBSnapshotIdentifier: !If [UseDBSnapshot, !Ref DBSnapshotName, !Ref "AWS::NoValue"]
+      ############# Aurora need this
+      DBClusterIdentifier: !Ref DBCluster
+  DBInstance:
+    Condition: isntLarge
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: Snapshot
+    Properties:
+      DBInstanceIdentifier: instance-a
+      DBInstanceClass: !FindInMap [EnvSize, !Ref EnvironmentSize, DB]
+      Engine: mysql
+      EngineVersion: 5.7.22
+      LicenseModel: general-public-license
+      AutoMinorVersionUpgrade: FALSE
+      DBName: !If [UseDBSnapshot, !Ref "AWS::NoValue", !Ref DatabaseName]
+      DBSubnetGroupName: !Ref DBSubnetGroup
+      MultiAZ: FALSE
+      DBParameterGroupName: !Ref DBParamGroup
+      DBSnapshotIdentifier: !If [UseDBSnapshot, !Ref DBSnapshotName, !Ref "AWS::NoValue"]
+      ############ no need for Aurora
+      AllocatedStorage: !Ref DBAllocatedStorage
+      VPCSecurityGroups:
+      - !Ref MySQLSg
+      BackupRetentionPeriod: 1
+      PreferredBackupWindow: 19:00-19:30
+      PreferredMaintenanceWindow: sat:20:00-sat:20:30
+      MasterUsername: !If [UseDBSnapshot, !Ref "AWS::NoValue", !Ref DBUsername]
+      MasterUserPassword: !If [UseDBSnapshot, !Ref "AWS::NoValue", !Ref DBPassword]
+      # StorageEncrypted: TRUE
+      ############# Aurora need this
+      # DBClusterIdentifier: EEE
+      ############ no need for Read Replica
+      # MultiAZ: TRUE
+      # BackupRetentionPeriod: 1
+      # PreferredBackupWindow: 19:00-19:30
+      # MasterUsername: !Ref DBUsername
+      # MasterUserPassword: !Ref DBPassword
+      ############# Read Replica need this
+      # Aurora Automatically allocate writer and reader role for DB instances
+      # SourceDBInstanceIdentifier: EEE
+      # AvailabilityZone: ap-northeast-1a
+################### DBSubnetGroup
+  DBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupName: My-db-subnetgroup
+      DBSubnetGroupDescription: Database subnets for RDS
+      SubnetIds:
+      - !ImportValue Vpc-DBSubnetA
+      - !ImportValue Vpc-DBSubnetC
+################### DBParameterGroup
+  DBParamGroup:
+    Type: AWS::RDS::DBParameterGroup
+    Properties:
+      Description: "DBParamGroup"
+      Family: MySQL5.7
+      Parameters:
+        character_set_database: utf8mb4
+        character_set_client: utf8mb4
+        character_set_connection: utf8mb4
+        character_set_results: utf8mb4
+        character_set_server: utf8mb4
+        skip-character-set-client-handshake: TRUE
+################### DBParameterGroup for Aurora
+  DBParameterGroupForAurora:
+    Type: AWS::RDS::DBParameterGroup
+    Properties:
+      Description: "DBParameterGroupForAurora"
+      Family: aurora5.6
+      Parameters:
+        sql_mode: IGNORE_SPACE
+################### Output ###################
+# Outputs:
+#   JdbcConnectionString:
+#     Value:
+#       Fn::Join:
+#       - ''
+#       - - jdbc:mysql://
+#         - Ref: DatabaseDNSRecord
+#         - ":"
+#         - Fn::GetAtt:
+#           - DBInstance
+#           - Endpoint.Port
+#         - "/"
+#         - Ref: DBName
+#     Description: "-"

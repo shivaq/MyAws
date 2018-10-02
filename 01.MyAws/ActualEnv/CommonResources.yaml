@@ -1,0 +1,35 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: HostedZone
+################### Parameters ###################
+# Parameters:
+#   CWLogsHostedZoneArn:
+#     Type: String
+#     Description: Paste ARN of CloudWatchLogs for "local.com" which is ommitted ":*"
+################### Resources ###################
+Resources:
+# ################### HostedZone
+  MyPrivateHostedZone:
+    Type: AWS::Route53::HostedZone
+    Properties:
+      HostedZoneConfig:
+        Comment: My hosted zone for local.com
+      Name: my.local
+      # if VPC is specified, it is treated as a private hosted zone
+      VPCs:
+        -
+          VPCId: !ImportValue Vpc-MyVpc
+          VPCRegion: ap-northeast-1
+      HostedZoneTags:
+        -
+          Key: ZoneType
+          Value: Private
+      # QueryLogging supports only Public Hostzone and cloudwatch logs must in us-east1 region
+      # QueryLoggingConfig:
+      #   CloudWatchLogsLogGroupArn: !Ref CWLogsHostedZoneArn
+################ Outputs ################
+Outputs:
+  MyPrivateHostedZone:
+    Value: !Ref MyPrivateHostedZone
+    Export:
+      Name: !Sub "${AWS::StackName}-MyPrivateHostedZone"

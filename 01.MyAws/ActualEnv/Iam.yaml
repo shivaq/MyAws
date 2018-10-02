@@ -1,0 +1,75 @@
+---
+AWSTemplateFormatVersion: 2010-09-09
+Resources:
+################ User & Key ################
+  IamUserTest:
+    Type: AWS::IAM::User
+    Properties:
+      UserName: test-user
+      LoginProfile:
+        Password: "jdAyruwaenvasld1urt"
+        PasswordResetRequired: false
+      Path: "/somedevision/subdivision/someproject/develper/"
+  IamKeysTest:
+    DependsOn: IamUserTest
+    Type: "AWS::IAM::AccessKey"
+    Properties:
+      UserName: !Ref IamUserTest
+################ Group ################
+  IamGroupAdmin:
+    Type: AWS::IAM::Group
+    Properties:
+      GroupName: ShivaqAdmin
+      Path: "/somedevision/subdivision/someproject/admin/"
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/AdministratorAccess"
+  IamUserToGroupAdmin:
+    Type: AWS::IAM::UserToGroupAddition
+    Properties:
+      GroupName: !Ref IamGroupAdmin
+      Users:
+        - !Ref IamUserTest
+############## Role ##############
+  PolicyToStopEc2:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: StopEc2
+      Description: StopEc2
+      Path: /
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+            - logs:*
+            - ec2:StopInstances
+            - ec2:Describe*
+            Resource: "*"
+      Roles:
+        - !Ref RoleToStopEc2
+  RoleToStopEc2:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: RoleToStopEc2
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - "sts:AssumeRole"
+      Path: "/"
+################ Outputs ################
+Outputs:
+  customerakeyId:
+    Description:  Access Key ID
+    Value: !Ref IamKeysTest
+  IamSecretkey:
+    Description:  Secret Access Key
+    Value: !GetAtt IamKeysTest.SecretAccessKey
+  RoleToStopEc2Arn:
+    Value: !GetAtt RoleToStopEc2.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-RoleToStopEc2Arn"

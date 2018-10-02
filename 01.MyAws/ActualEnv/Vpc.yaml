@@ -1,0 +1,184 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: VPC, Subnet, Gateways, RouteTable, Route
+################### Mappings ###################
+Mappings:
+  StackConfig:
+    VPC:
+      CIDR: 10.0.0.0/16
+    PublicSubnetA:
+      CIDR: 10.0.0.0/24
+      AZ: ap-northeast-1a
+    # PublicSubnetC:
+    #   CIDR: 10.0.1.0/24
+      # AZ: ap-northeast-1c
+    # ExternalElbSubnetA:
+    #   CIDR: 10.0.50.0/24
+      # AZ: ap-northeast-1a
+    # ExternalElbSubnetC:
+    #   CIDR: 10.0.51.0/24
+      # AZ: ap-northeast-1c
+    PrivateWebSubnetA:
+      CIDR: 10.0.100.0/24
+      AZ: ap-northeast-1a
+    # PrivateWebSubnetC:
+    #   CIDR: 10.0.101.0/24
+      # AZ: ap-northeast-1c
+    # InternalElbSubnetA:
+    #   CIDR: 10.0.150.0/24
+      # AZ: ap-northeast-1a
+    # InternalElbSubnetC:
+    #   CIDR: 10.0.151.0/24
+      # AZ: ap-northeast-1c
+    DBSubnetA:
+      CIDR: 10.0.200.0/24
+      AZ: ap-northeast-1a
+    DBSubnetC:
+      CIDR: 10.0.201.0/24
+      AZ: ap-northeast-1c
+################### Resources ###################
+Resources:
+########## VPC ##########
+  MyVpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !FindInMap [ StackConfig, VPC, CIDR ]
+      InstanceTenancy: default
+      # Private Hosted Zone を使うのに必須
+      EnableDnsSupport: 'True'
+      EnableDnsHostnames: 'True'
+      Tags:
+      - Key: Name
+        Value: MyVpc
+########## Public Subnet ##########
+  PublicSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref MyVpc
+      AvailabilityZone: !FindInMap [ StackConfig, PublicSubnetA, AZ ]
+      CidrBlock: !FindInMap [ StackConfig, PublicSubnetA, CIDR ]
+      Tags:
+      - Key: Name
+        Value: PublicSubnetA
+      - Key: Network
+        Value: Public
+########## Private Subnet ##########
+  PrivateWebSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref MyVpc
+      AvailabilityZone: !FindInMap [ StackConfig, PrivateWebSubnetA, AZ ]
+      CidrBlock: !FindInMap [ StackConfig, PrivateWebSubnetA, CIDR ]
+      Tags:
+      - Key: Name
+        Value: PrivateWebSubnetA
+      - Key: Network
+        Value: Private
+  DBSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref MyVpc
+      AvailabilityZone: !FindInMap [ StackConfig, DBSubnetA, AZ ]
+      CidrBlock: !FindInMap [ StackConfig, DBSubnetA, CIDR ]
+      Tags:
+      - Key: Name
+        Value: DBSubnetA
+      - Key: Network
+        Value: Private
+  DBSubnetC:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref MyVpc
+      AvailabilityZone: !FindInMap [ StackConfig, DBSubnetC, AZ ]
+      CidrBlock: !FindInMap [ StackConfig, DBSubnetC, CIDR ]
+      Tags:
+      - Key: Name
+        Value: DBSubnetC
+      - Key: Network
+        Value: Private
+########## Internet Gateway ##########
+  MyInternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+      - Key: Name
+        Value: MyInternetGateway
+  MyIgwVpcAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref MyInternetGateway
+      VpcId: !Ref MyVpc
+########## Public RouteTable ##########
+  RtbPublic:
+    Type: AWS::EC2::RouteTable
+    DependsOn: MyInternetGateway
+    Properties:
+      VpcId: !Ref MyVpc
+      Tags:
+      - Key: Name
+        Value: RtbPublic
+      - Key: Network
+        Value: Public
+  MyPublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: MyInternetGateway
+    Properties:
+      RouteTableId: !Ref RtbPublic
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref MyInternetGateway
+  RtbAssociationPublicSubnetA:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnetA
+      RouteTableId: !Ref RtbPublic
+########## Private RouteTable ##########
+  MyRtbPrivateWeb:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref MyVpc
+      Tags:
+      - Key: Name
+        Value: MyRtbPrivateWeb
+      - Key: Network
+        Value: Private
+  RtbAssociationPrivateWebSubnetA:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateWebSubnetA
+      RouteTableId: !Ref MyRtbPrivateWeb
+  RtbAssociationDBSubnetA:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref DBSubnetA
+      RouteTableId: !Ref MyRtbPrivateWeb
+  RtbAssociatioDBSubnetC:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref DBSubnetC
+      RouteTableId: !Ref MyRtbPrivateWeb
+################ Outputs ################
+Outputs:
+  MyVpc:
+    Value: !Ref MyVpc
+    Export:
+      Name: !Sub "${AWS::StackName}-MyVpc"
+  MyVpcCidrBlock:
+    Value: !GetAtt MyVpc.CidrBlock
+    Export:
+      Name: !Sub "${AWS::StackName}-MyVpcCidrBlock"
+  PublicSubnetA:
+    Value: !Ref PublicSubnetA
+    Export:
+      Name: !Sub "${AWS::StackName}-PublicSubnetA"
+  PrivateWebSubnetA:
+    Value: !Ref PrivateWebSubnetA
+    Export:
+      Name: !Sub "${AWS::StackName}-PrivateWebSubnetA"
+  DBSubnetA:
+    Value: !Ref DBSubnetA
+    Export:
+      Name: !Sub "${AWS::StackName}-DBSubnetA"
+  DBSubnetC:
+    Value: !Ref DBSubnetC
+    Export:
+      Name: !Sub "${AWS::StackName}-DBSubnetC"

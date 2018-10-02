@@ -1,0 +1,117 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: EC2(Web01), SecurityGroup, Recordset for Private Subnet
+################### Parameters ###################
+Parameters:
+  KeyName:
+    Description: Name of an existing EC2 KeyPair to enable SSH access to the instances
+    Type: AWS::EC2::KeyPair::KeyName
+    MinLength: '1'
+    MaxLength: '64'
+    AllowedPattern: "[-_ a-zA-Z0-9]*"
+    ConstraintDescription: can contain only alphanumeric characters, spaces, dashes
+      and underscores.
+    Default: MyKey
+################### Mappings ###################
+Mappings:
+  StackConfig:
+    MyVpcAmazonDns:
+      CIDR: 10.0.0.2/32
+      # Amazon Linux 2 comes with five years support. It provides Linux kernel 4.14 tuned for optimal performance on Amazon EC2, systemd 219, GCC 7.3, Glibc 2.26, Binutils 2.29.1, and the latest software packages through extras
+    MyDefault:
+      ImageId: ami-08847abae18baa040
+      InstanceType: t2.micro
+      EbsOptimized: False
+      VolumeType: gp2
+      VolumeSize: 10
+    PrivateWebSubnetA:
+      CIDR: 10.0.100.0/24
+      AZ: ap-northeast-1a
+    # PrivateWebSubnetC:
+    #   CIDR: 10.0.101.0/24
+    #   AZ: ap-northeast-1c
+######################## Resources ########################
+Resources:
+# Security Group ###################################
+  SgOutForPrivate:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: !ImportValue Vpc-MyVpc
+      GroupDescription: SG inbound rule for all EC2 instances
+      Tags:
+        - Key: Name
+          Value: SgOutForPrivate
+      GroupName: SgOutForPrivate
+      # SecurityGroupIngress:
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          FromPort: -1
+          ToPort: -1
+          CidrIp: !ImportValue Vpc-MyVpcCidrBlock
+          Description: Any port to MyVPC
+        - IpProtocol: tcp
+          FromPort: 53
+          ToPort: 53
+          CidrIp: !FindInMap [ StackConfig, MyVpcAmazonDns, CIDR]
+          Description: DNS query to Amazon Dns
+  WebToDbSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: !ImportValue Vpc-MyVpc
+      GroupDescription: Communicate with MySQL
+      Tags:
+        - Key: Name
+          Value: WebToDbSg
+      GroupName: WebToDbSg
+      # SecurityGroupIngress:
+      SecurityGroupEgress:
+        - IpProtocol: icmp
+          FromPort: 0
+          ToPort: 0
+          CidrIp: 127.0.0.1/32
+          Description: loopback to workaround any
+################### RecordSet
+  Web01Record:
+    Type: AWS::Route53::RecordSetGroup
+    Properties:
+      HostedZoneId: !ImportValue CommonResources-MyPrivateHostedZone
+      Comment: A record for the Web01 private IP address.
+      RecordSets:
+        - Name: web01.my.local.
+          Type: A
+          TTL: 300
+          ResourceRecords:
+            - !GetAtt Web01.PrivateIp
+################ EC2 ################
+  Web01:
+    Type: AWS::EC2::Instance
+    Properties:
+      Tags:
+      - Key: Name
+        Value: Web01
+      - Key: RunningOrStop
+        Value: stop_everynight
+      # IamInstanceProfile:
+      SecurityGroupIds:
+        - !Ref WebToDbSg
+        - !Ref SgOutForPrivate
+        - !ImportValue PublicSgEc2-SgInForAll
+      SubnetId: !ImportValue Vpc-PrivateWebSubnetA
+      AvailabilityZone: !FindInMap [ StackConfig, PrivateWebSubnetA, AZ]
+      SourceDestCheck: True
+      KeyName: !Ref KeyName
+      ImageId: !FindInMap [ StackConfig, MyDefault, ImageId ]
+      InstanceType: !FindInMap [ StackConfig, MyDefault, InstanceType ]
+      EbsOptimized: !FindInMap [ StackConfig, MyDefault, EbsOptimized]
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeType: !FindInMap [ StackConfig, MyDefault, VolumeType]
+            VolumeSize: !FindInMap [ StackConfig, MyDefault, VolumeSize]
+            DeleteOnTermination: True
+################ Outputs ################
+Outputs:
+  WebToDbSg:
+    Value: !Ref WebToDbSg
+    Export:
+      Name: !Sub "${AWS::StackName}-WebToDbSg"
