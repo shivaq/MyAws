@@ -1,6 +1,6 @@
 ---
 AWSTemplateFormatVersion: '2010-09-09'
-Description: EC2(Bastion, Ansible, Proxy), SecurityGroup, Recordset for Public Subnet
+Description: Recordset & EC2(Bastion, Proxy, Ansible, Web)
 ################### Parameters ###################
 Parameters:
   KeyName:
@@ -12,10 +12,6 @@ Parameters:
     ConstraintDescription: can contain only alphanumeric characters, spaces, dashes
       and underscores.
     Default: MyKey
-  KakuninKun:
-    Type: String
-    Default: 121.118.178.141/32
-    Description: My Global Ip checked at KakuninKun
   # SSHFrom:
   #   Description: Lockdown SSH access to the bastion host (default can be accessed
   #     from anywhere)
@@ -49,7 +45,7 @@ Mappings:
     # ExternalElbSubnetC:
     #   CIDR: 10.0.51.0/24
     #   AZ: ap-northeast-1c
-    PrivateWebSubnetA:
+    PrivateSubnetA:
       CIDR: 10.0.100.0/24
       AZ: ap-northeast-1a
     # PrivateWebSubnetC:
@@ -67,136 +63,9 @@ Mappings:
     DBSubnetC:
       CIDR: 10.0.201.0/24
       AZ: ap-northeast-1c
-
 ######################## Resources ########################
 Resources:
-# Security Group ###################################
-  SgInForAll:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      VpcId: !ImportValue Vpc-MyVpc
-      GroupDescription: SG inbound rule for all EC2 instances
-      Tags:
-        - Key: Name
-          Value: SgInForAll
-      GroupName: SgInForAll
-      SecurityGroupIngress:
-        - IpProtocol: icmp
-          FromPort: 8
-          ToPort: -1
-          CidrIp: !ImportValue Vpc-MyVpcCidrBlock
-          Description: ping from MyVPC
-        - IpProtocol: tcp
-          FromPort: 22
-          ToPort: 22
-          SourceSecurityGroupId: !Ref BastionSg
-          Description: SSH from Bastion
-        - IpProtocol: tcp
-          FromPort: 22
-          ToPort: 22
-          SourceSecurityGroupId: !Ref AnsibleSg
-          Description: SSH from Ansible
-      SecurityGroupEgress:
-        - IpProtocol: icmp
-          FromPort: 0
-          ToPort: 0
-          CidrIp: 127.0.0.1/32
-          Description: loopback to workaround any
-  SgOutForPublic:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      VpcId: !ImportValue Vpc-MyVpc
-      GroupDescription: SG inbound rule for all EC2 instances
-      Tags:
-        - Key: Name
-          Value: SgOutForPublic
-      GroupName: SgOutForPublic
-      # SecurityGroupIngress:
-      SecurityGroupEgress:
-        - IpProtocol: tcp
-          FromPort: 22
-          ToPort: 22
-          CidrIp: !ImportValue Vpc-MyVpcCidrBlock
-          Description: SSH to MyVPC
-        - IpProtocol: tcp
-          FromPort: 8080
-          ToPort: 8080
-          SourceSecurityGroupId: !Ref ProxySg
-          Description: access to proxy
-        - IpProtocol: tcp
-          FromPort: 53
-          ToPort: 53
-          CidrIp: !FindInMap [ StackConfig, MyVpcAmazonDns, CIDR]
-          Description: DNS query to Amazon Dns
-        - IpProtocol: icmp
-          FromPort: 8
-          ToPort: -1
-          CidrIp: !ImportValue Vpc-MyVpcCidrBlock
-          Description: ping to MyVPC
-  BastionSg:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      VpcId: !ImportValue Vpc-MyVpc
-      GroupDescription: Bastion allows to go anywhere in its VPC
-      Tags:
-        - Key: Name
-          Value: BastionSg
-      GroupName: BastionSg
-      SecurityGroupIngress:
-        - IpProtocol: tcp
-          FromPort: 22
-          ToPort: 22
-          CidrIp: !Ref KakuninKun # 確認くん
-          Description: SSH from your PC
-      SecurityGroupEgress:
-        - IpProtocol: icmp
-          FromPort: 0
-          ToPort: 0
-          CidrIp: 127.0.0.1/32
-          Description: loopback to workaround any
-  AnsibleSg:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      VpcId: !ImportValue Vpc-MyVpc
-      GroupDescription: Ansible issue order to anywhere in its VPC
-      Tags:
-        - Key: Name
-          Value: AnsibleSg
-      GroupName: AnsibleSg
-      # SecurityGroupIngress:
-      SecurityGroupEgress:
-        - IpProtocol: icmp
-          FromPort: 0
-          ToPort: 0
-          CidrIp: 127.0.0.1/32
-          Description: loopback to workaround any
-  ProxySg:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      VpcId: !ImportValue Vpc-MyVpc
-      GroupDescription: Accept 8080 from its vpc
-      Tags:
-        - Key: Name
-          Value: ProxySg
-      GroupName: ProxySg
-      SecurityGroupIngress:
-        - IpProtocol: tcp
-          FromPort: 8080
-          ToPort: 8080
-          SourceSecurityGroupId: !Ref SgInForAll
-          Description: proxy access from all EC2 instances
-      SecurityGroupEgress:
-        - IpProtocol: tcp
-          FromPort: 80
-          ToPort: 80
-          CidrIp: 0.0.0.0/0
-          Description: Out to internet via Internet Gateway
-        - IpProtocol: tcp
-          FromPort: 443
-          ToPort: 443
-          CidrIp: 0.0.0.0/0
-          Description: Out to internet via Internet Gateway
-################### RecordSet
+################### RecordSet ###################
   BastionRecord:
     Type: AWS::Route53::RecordSetGroup
     Properties:
@@ -208,6 +77,7 @@ Resources:
           TTL: 300
           ResourceRecords:
             - !GetAtt Bastion.PrivateIp
+##########
   ProxyRecord:
     Type: AWS::Route53::RecordSetGroup
     Properties:
@@ -219,6 +89,7 @@ Resources:
           TTL: 300
           ResourceRecords:
             - !GetAtt Proxy.PrivateIp
+##########
   AnsibleRecord:
     Type: AWS::Route53::RecordSetGroup
     Properties:
@@ -230,7 +101,18 @@ Resources:
           TTL: 300
           ResourceRecords:
             - !GetAtt Ansible.PrivateIp
-
+##########
+  Web01Record:
+    Type: AWS::Route53::RecordSetGroup
+    Properties:
+      HostedZoneId: !ImportValue CommonResources-MyPrivateHostedZone
+      Comment: A record for the Web01 private IP address.
+      RecordSets:
+        - Name: web01.my.local.
+          Type: A
+          TTL: 300
+          ResourceRecords:
+            - !GetAtt Web01.PrivateIp
 ################ EC2 ################
   Bastion:
     Type: AWS::EC2::Instance
@@ -245,9 +127,9 @@ Resources:
         - AssociatePublicIpAddress: true
           DeviceIndex: 0
           GroupSet:
-            - !Ref BastionSg
-            - !Ref SgOutForPublic
-            - !Ref SgInForAll
+            - !ImportValue Sg-BastionSg
+            - !ImportValue Sg-SgOutForPublic
+            - !ImportValue Sg-SgInForAll
           SubnetId: !ImportValue Vpc-PublicSubnetA
       AvailabilityZone: !FindInMap [ StackConfig, PublicSubnetA, AZ]
       SourceDestCheck: True
@@ -261,6 +143,7 @@ Resources:
             VolumeType: !FindInMap [ StackConfig, MyDefault, VolumeType]
             VolumeSize: !FindInMap [ StackConfig, MyDefault, VolumeSize]
             DeleteOnTermination: True
+##########
   Proxy:
     Type: AWS::EC2::Instance
     Properties:
@@ -274,9 +157,9 @@ Resources:
         - AssociatePublicIpAddress: true
           DeviceIndex: 0
           GroupSet:
-            - !Ref ProxySg
-            - !Ref SgOutForPublic
-            - !Ref SgInForAll
+            - !ImportValue Sg-ProxySg
+            - !ImportValue Sg-SgOutForPublic
+            - !ImportValue Sg-SgInForAll
           SubnetId: !ImportValue Vpc-PublicSubnetA
       AvailabilityZone: !FindInMap [ StackConfig, PublicSubnetA, AZ]
       # デフォルトは、インスタンス自身が送受信するトラフィックが、
@@ -324,9 +207,7 @@ Resources:
         # put_squid_conf:
         #   sources:
         #     /etc/squid/squid.conf: "https://s3.amazonaws.com/mybucket/myapp.tar.gz"
-
-
-
+##########
   Ansible:
     Type: AWS::EC2::Instance
     Properties:
@@ -337,9 +218,9 @@ Resources:
         Value: stop_everynight
       # IamInstanceProfile:
       SecurityGroupIds:
-        - !Ref AnsibleSg
-        - !Ref SgOutForPublic
-        - !Ref SgInForAll
+        - !ImportValue Sg-AnsibleSg
+        - !ImportValue Sg-SgOutForPublic
+        - !ImportValue Sg-SgInForAll
       SubnetId: !ImportValue Vpc-PublicSubnetA
       AvailabilityZone: !FindInMap [ StackConfig, PublicSubnetA, AZ]
       SourceDestCheck: True
@@ -361,11 +242,46 @@ Resources:
     #         - install_cfn
     #       ansible_install:
     #         - install_ansible
-
-
-################ Outputs ################
-Outputs:
-  SgInForAll:
-    Value: !Ref SgInForAll
-    Export:
-      Name: !Sub "${AWS::StackName}-SgInForAll"
+##########
+  Web01:
+    Type: AWS::EC2::Instance
+    Properties:
+      Tags:
+      - Key: Name
+        Value: Web01
+      - Key: RunningOrStop
+        Value: stop_everynight
+      # IamInstanceProfile:
+      SecurityGroupIds:
+        - !ImportValue Sg-WebToDbSg
+        - !ImportValue Sg-SgOutForPrivate
+        - !ImportValue Sg-SgInForAll
+      SubnetId: !ImportValue Vpc-PrivateSubnetA
+      AvailabilityZone: !FindInMap [ StackConfig, PrivateSubnetA, AZ]
+      SourceDestCheck: True
+      KeyName: !Ref KeyName
+      ImageId: !FindInMap [ StackConfig, MyDefault, ImageId ]
+      InstanceType: !FindInMap [ StackConfig, MyDefault, InstanceType ]
+      EbsOptimized: !FindInMap [ StackConfig, MyDefault, EbsOptimized]
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeType: !FindInMap [ StackConfig, MyDefault, VolumeType]
+            VolumeSize: !FindInMap [ StackConfig, MyDefault, VolumeSize]
+            DeleteOnTermination: True
+################ SecurityGroup ################
+  DummySgEc2:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: !ImportValue Vpc-MyVpc
+      GroupDescription: DummySgEc2
+      Tags:
+        - Key: Name
+          Value: DummySgEc2
+      GroupName: DummySgEc2
+      SecurityGroupEgress:
+        - IpProtocol: icmp
+          FromPort: 0
+          ToPort: 0
+          CidrIp: 127.0.0.1/32
+          Description: loopback to workaround any

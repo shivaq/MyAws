@@ -1,0 +1,5 @@
+---
+mysql_port: 3306
+# mysql_root_user_name: vault を使用
+# mysql_root_pass: vault を使用
+...

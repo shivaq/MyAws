@@ -1,0 +1,4 @@
+---
+required_packages:
+  - "Development Tools"
+  # - "@Development Tools" # 本には @ がついていた。

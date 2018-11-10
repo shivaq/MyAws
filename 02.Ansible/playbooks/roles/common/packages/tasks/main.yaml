@@ -1,0 +1,25 @@
+---
+- name: Select Os specific variables
+  include_vars: "{{ ansible_os_family }}".yaml
+  # 自動収集された facts によって、組み込まれる var ファイルが定義される
+  # ここでは "RedHat"が ansible_os_family としてるが、Amazon Linux ではどうなるか確認が必要
+
+# Package のアップデート
+- name: Update yum packages
+yum:
+  name: "{{ item }}"
+  state: latest
+  update_cache: yes
+with_items:
+  - "epel-release"
+  - "*"
+
+# Package のインストール
+- name: Install the required packages
+  package:
+    name: "{{ item }}"
+    state: present
+    with_items: "{{ required_packages }}"
+    # Select Os specific variables パートにて、
+    # OS 名のファイルが、vars から組み込まれているので、
+    # vars 内ファイル内の、required_packages で定義された値が参照される

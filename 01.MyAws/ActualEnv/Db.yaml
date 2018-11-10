@@ -87,22 +87,6 @@ Mappings:
       AZ: ap-northeast-1c
 ################### Resources ###################
 Resources:
-################### SecurityGroup
-  MySQLSg:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      VpcId: !ImportValue Vpc-MyVpc
-      GroupDescription: RDS that accept mysql access
-      Tags:
-      - Key: Name
-        Value: MySQLSg
-      SecurityGroupIngress:
-        - IpProtocol: tcp
-          FromPort: 3306
-          ToPort: 3306
-          SourceSecurityGroupId: !ImportValue PrivateSgEc2-WebToDbSg
-          Description: Inbound from Web servers with mysql
-
 ################### RecordSet
   DBClusterRecord:
     Condition: isLarge
@@ -210,7 +194,7 @@ Resources:
       ############ no need for Aurora
       AllocatedStorage: !Ref DBAllocatedStorage
       VPCSecurityGroups:
-      - !Ref MySQLSg
+      - !ImportValue Sg-MySQLSg
       BackupRetentionPeriod: 1
       PreferredBackupWindow: 19:00-19:30
       PreferredMaintenanceWindow: sat:20:00-sat:20:30

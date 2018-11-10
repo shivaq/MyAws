@@ -1,0 +1,6 @@
+---
+# 優先度の低い変数を default 内で定義
+  locale_timezone: "JST"
+  locale_locale: "en_US.UTF-8"
+  # locale_keymap: jp106
+  locale_keymap: jp-OADG109A # windows

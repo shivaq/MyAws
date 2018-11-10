@@ -11,21 +11,21 @@
 
 # some basic default values...
 
-inventory      = /etc/ansible/hosts
-library        = /usr/share/my_modules/
-module_utils   = /usr/share/my_module_utils/
-remote_tmp     = ~/.ansible/tmp
-local_tmp      = ~/.ansible/tmp
-plugin_filters_cfg = /etc/ansible/plugin_filters.yml
-forks          = 5
-poll_interval  = 15
-sudo_user      = root
-ask_sudo_pass = True
-ask_pass      = True
-transport      = smart
-remote_port    = 22
-module_lang    = C
-module_set_locale = False
+#inventory      = /etc/ansible/hosts
+#library        = /usr/share/my_modules/
+#module_utils   = /usr/share/my_module_utils/
+#remote_tmp     = ~/.ansible/tmp
+#local_tmp      = ~/.ansible/tmp
+#plugin_filters_cfg = /etc/ansible/plugin_filters.yml
+#forks          = 5
+#poll_interval  = 15
+#sudo_user      = root
+#ask_sudo_pass = True
+#ask_pass      = True
+#transport      = smart
+#remote_port    = 22
+#module_lang    = C
+#module_set_locale = False
 
 # plays will gather facts by default, which contain information about
 # the remote system.
@@ -68,7 +68,7 @@ module_set_locale = False
 #roles_path    = /etc/ansible/roles
 
 # uncomment this to disable SSH key host checking
-host_key_checking = False
+#host_key_checking = False
 
 # change the default callback, you can only have one 'stdout' type  enabled at a time.
 #stdout_callback = skippy

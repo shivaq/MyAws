@@ -1,0 +1,13 @@
+---
+user_newusers:
+  Inoki:
+    detail: "Administration User Inoki"
+    # 平文登録すると、認証時に hash された入力値との比較をされてマッチしない
+    # --extra-vars
+    password: "{{ 'ansible' | password_hash('sha256')}}"
+    groups: admin
+    privilege: admin
+
+
+vault に パスワード と ソルト とを格納しておく
+password={{upassword|password_hash('sha512', upassword_salt)}}

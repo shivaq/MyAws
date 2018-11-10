@@ -1,0 +1,13 @@
+---
+- name: Set common settings
+  hosts: all
+  # hosts: ansible
+  # hosts: ansible:bastion # ansible グループと、bastion グループ
+  # hosts: ansible:&private # ansible グループかつ、privateグループ
+  # hosts: web:!web03.my.local # web グループ。ただし、web03 を除く
+  environment:
+    http_proxy: "http://proxy.my.local:8080"
+    https_proxy: "http://proxy.my.local:8080"
+
+  roles:
+    - name: common/hostname

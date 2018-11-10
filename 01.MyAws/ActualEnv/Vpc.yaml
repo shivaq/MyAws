@@ -18,7 +18,7 @@ Mappings:
     # ExternalElbSubnetC:
     #   CIDR: 10.0.51.0/24
       # AZ: ap-northeast-1c
-    PrivateWebSubnetA:
+    PrivateSubnetA:
       CIDR: 10.0.100.0/24
       AZ: ap-northeast-1a
     # PrivateWebSubnetC:
@@ -63,15 +63,15 @@ Resources:
       - Key: Network
         Value: Public
 ########## Private Subnet ##########
-  PrivateWebSubnetA:
+  PrivateSubnetA:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref MyVpc
-      AvailabilityZone: !FindInMap [ StackConfig, PrivateWebSubnetA, AZ ]
-      CidrBlock: !FindInMap [ StackConfig, PrivateWebSubnetA, CIDR ]
+      AvailabilityZone: !FindInMap [ StackConfig, PrivateSubnetA, AZ ]
+      CidrBlock: !FindInMap [ StackConfig, PrivateSubnetA, CIDR ]
       Tags:
       - Key: Name
-        Value: PrivateWebSubnetA
+        Value: PrivateSubnetA
       - Key: Network
         Value: Private
   DBSubnetA:
@@ -141,10 +141,10 @@ Resources:
         Value: MyRtbPrivateWeb
       - Key: Network
         Value: Private
-  RtbAssociationPrivateWebSubnetA:
+  RtbAssociationPrivateSubnetA:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
-      SubnetId: !Ref PrivateWebSubnetA
+      SubnetId: !Ref PrivateSubnetA
       RouteTableId: !Ref MyRtbPrivateWeb
   RtbAssociationDBSubnetA:
     Type: AWS::EC2::SubnetRouteTableAssociation
@@ -170,10 +170,10 @@ Outputs:
     Value: !Ref PublicSubnetA
     Export:
       Name: !Sub "${AWS::StackName}-PublicSubnetA"
-  PrivateWebSubnetA:
-    Value: !Ref PrivateWebSubnetA
+  PrivateSubnetA:
+    Value: !Ref PrivateSubnetA
     Export:
-      Name: !Sub "${AWS::StackName}-PrivateWebSubnetA"
+      Name: !Sub "${AWS::StackName}-PrivateSubnetA"
   DBSubnetA:
     Value: !Ref DBSubnetA
     Export:
