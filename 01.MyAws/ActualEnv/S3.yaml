@@ -133,6 +133,17 @@ Resources:
                 - ELBLogger
                 - !Ref AWS::Region
                 - ElbAccountId
+
+####################
+  SourceBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: shivaq-source
+####################
+  SourceModifiedBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: shivaq-source-modified
 ################## LifeCycledSIABucket
 # STANDARD_IA に 30日で移動
   # LifeCycledSIABucket:
