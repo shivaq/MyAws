@@ -4,3 +4,4 @@
 .pypi.org # for pip
 .files.pythonhosted.org
 .fedoraproject.org # for epel
+.yamagata-u.ac.jp # for mirror site to isntalling Development Tools

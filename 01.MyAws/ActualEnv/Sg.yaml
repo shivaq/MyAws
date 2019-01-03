@@ -180,8 +180,6 @@ Resources:
       # SecurityGroupIngress:
       SecurityGroupEgress:
         - IpProtocol: -1
-          FromPort: -1
-          ToPort: -1
           CidrIp: !ImportValue Vpc-MyVpcCidrBlock
           Description: Any port to MyVPC
         - IpProtocol: tcp

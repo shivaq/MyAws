@@ -14,7 +14,7 @@ Resources:
     Properties:
       HostedZoneConfig:
         Comment: My hosted zone for local.com
-      Name: my.local
+      Name: my.local.
       # if VPC is specified, it is treated as a private hosted zone
       VPCs:
         -

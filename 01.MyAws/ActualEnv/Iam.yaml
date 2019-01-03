@@ -30,6 +30,7 @@ Resources:
       Users:
         - !Ref IamUserTest
 ############## Role ##############
+############## StopEc2
   PolicyToStopEc2:
     Type: AWS::IAM::ManagedPolicy
     Properties:
@@ -61,6 +62,81 @@ Resources:
             Action:
               - "sts:AssumeRole"
       Path: "/"
+############## EC2 Common
+  PolicyEc2Common:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: Ec2Common
+      Description: Common role for Ec2 instances
+      Path: /
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+            - s3:List*
+            - s3:PutObject
+            Resource: "*"
+      Roles:
+        - !Ref RoleEc2Common
+  RoleEc2Common:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: Ec2Common
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - "sts:AssumeRole"
+      Path: "/"
+  ProfileEc2Common:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: Ec2Common
+      Roles:
+        - !Ref RoleEc2Common
+############## EC2 GetS3Objects
+  PolicyEc2GetS3Objects:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: Ec2GetS3Objects
+      Description: Ec2 instances can get S3 objects
+      Path: /
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+            - s3:List*
+            - s3:GetObject
+            - s3:PutObject
+            Resource: "*"
+      Roles:
+        - !Ref RoleEc2GetS3Objects
+  RoleEc2GetS3Objects:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: Ec2GetS3Objects
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - "sts:AssumeRole"
+      Path: "/"
+  ProfileEc2GetS3Objects:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: Ec2GetS3Objects
+      Roles:
+        - !Ref RoleEc2GetS3Objects
 ################ Outputs ################
 Outputs:
   customerakeyId:
@@ -73,3 +149,7 @@ Outputs:
     Value: !GetAtt RoleToStopEc2.Arn
     Export:
       Name: !Sub "${AWS::StackName}-RoleToStopEc2Arn"
+  ProfileEc2Common:
+    Value: !Ref ProfileEc2Common
+    Export:
+      Name: !Sub "${AWS::StackName}-ProfileEc2Common"

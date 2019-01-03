@@ -90,29 +90,29 @@ Resources:
           ResourceRecords:
             - !GetAtt Proxy.PrivateIp
 ##########
-  AnsibleRecord:
-    Type: AWS::Route53::RecordSetGroup
-    Properties:
-      HostedZoneId: !ImportValue CommonResources-MyPrivateHostedZone
-      Comment: A record for the Ansible private IP address.
-      RecordSets:
-        - Name: ansible.my.local.
-          Type: A
-          TTL: 300
-          ResourceRecords:
-            - !GetAtt Ansible.PrivateIp
+  # AnsibleRecord:
+  #   Type: AWS::Route53::RecordSetGroup
+  #   Properties:
+  #     HostedZoneId: !ImportValue CommonResources-MyPrivateHostedZone
+  #     Comment: A record for the Ansible private IP address.
+  #     RecordSets:
+  #       - Name: ansible.my.local.
+  #         Type: A
+  #         TTL: 300
+  #         ResourceRecords:
+  #           - !GetAtt Ansible.PrivateIp
 ##########
-  Web01Record:
-    Type: AWS::Route53::RecordSetGroup
-    Properties:
-      HostedZoneId: !ImportValue CommonResources-MyPrivateHostedZone
-      Comment: A record for the Web01 private IP address.
-      RecordSets:
-        - Name: web01.my.local.
-          Type: A
-          TTL: 300
-          ResourceRecords:
-            - !GetAtt Web01.PrivateIp
+  # Web01Record:
+  #   Type: AWS::Route53::RecordSetGroup
+  #   Properties:
+  #     HostedZoneId: !ImportValue CommonResources-MyPrivateHostedZone
+  #     Comment: A record for the Web01 private IP address.
+  #     RecordSets:
+  #       - Name: web01.my.local.
+  #         Type: A
+  #         TTL: 300
+  #         ResourceRecords:
+  #           - !GetAtt Web01.PrivateIp
 ################ EC2 ################
   Bastion:
     Type: AWS::EC2::Instance
@@ -208,32 +208,32 @@ Resources:
         #   sources:
         #     /etc/squid/squid.conf: "https://s3.amazonaws.com/mybucket/myapp.tar.gz"
 ##########
-  Ansible:
-    Type: AWS::EC2::Instance
-    Properties:
-      Tags:
-      - Key: Name
-        Value: Ansible
-      - Key: RunningOrStop
-        Value: stop_everynight
-      # IamInstanceProfile:
-      SecurityGroupIds:
-        - !ImportValue Sg-AnsibleSg
-        - !ImportValue Sg-SgOutForPublic
-        - !ImportValue Sg-SgInForAll
-      SubnetId: !ImportValue Vpc-PublicSubnetA
-      AvailabilityZone: !FindInMap [ StackConfig, PublicSubnetA, AZ]
-      SourceDestCheck: True
-      KeyName: !Ref KeyName
-      ImageId: !FindInMap [ StackConfig, MyDefault, ImageId ]
-      InstanceType: !FindInMap [ StackConfig, MyDefault, InstanceType ]
-      EbsOptimized: !FindInMap [ StackConfig, MyDefault, EbsOptimized]
-      BlockDeviceMappings:
-        - DeviceName: /dev/xvda
-          Ebs:
-            VolumeType: !FindInMap [ StackConfig, MyDefault, VolumeType]
-            VolumeSize: !FindInMap [ StackConfig, MyDefault, VolumeSize]
-            DeleteOnTermination: True
+  # Ansible:
+  #   Type: AWS::EC2::Instance
+  #   Properties:
+  #     Tags:
+  #     - Key: Name
+  #       Value: Ansible
+  #     - Key: RunningOrStop
+  #       Value: stop_everynight
+  #     # IamInstanceProfile:
+  #     SecurityGroupIds:
+  #       - !ImportValue Sg-AnsibleSg
+  #       - !ImportValue Sg-SgOutForPrivate
+  #       - !ImportValue Sg-SgInForAll
+  #     SubnetId: !ImportValue Vpc-PrivateSubnetA
+  #     AvailabilityZone: !FindInMap [ StackConfig, PrivateSubnetA, AZ]
+  #     SourceDestCheck: True
+  #     KeyName: !Ref KeyName
+  #     ImageId: !FindInMap [ StackConfig, MyDefault, ImageId ]
+  #     InstanceType: !FindInMap [ StackConfig, MyDefault, InstanceType ]
+  #     EbsOptimized: !FindInMap [ StackConfig, MyDefault, EbsOptimized]
+  #     BlockDeviceMappings:
+  #       - DeviceName: /dev/xvda
+  #         Ebs:
+  #           VolumeType: !FindInMap [ StackConfig, MyDefault, VolumeType]
+  #           VolumeSize: !FindInMap [ StackConfig, MyDefault, VolumeSize]
+  #           DeleteOnTermination: True
     # Metadata:
     #   # Install ansible
     #   AWS::CloudFormation::Init:
@@ -243,17 +243,44 @@ Resources:
     #       ansible_install:
     #         - install_ansible
 ##########
-  Web01:
+  # Web01:
+  #   Type: AWS::EC2::Instance
+  #   Properties:
+  #     Tags:
+  #     - Key: Name
+  #       Value: Web01
+  #     - Key: RunningOrStop
+  #       Value: stop_everynight
+  #     IamInstanceProfile: !ImportValue Iam-ProfileEc2Common
+  #     SecurityGroupIds:
+  #       - !ImportValue Sg-WebToDbSg
+  #       - !ImportValue Sg-SgOutForPrivate
+  #       - !ImportValue Sg-SgInForAll
+  #     SubnetId: !ImportValue Vpc-PrivateSubnetA
+  #     AvailabilityZone: !FindInMap [ StackConfig, PrivateSubnetA, AZ]
+  #     SourceDestCheck: True
+  #     KeyName: !Ref KeyName
+  #     ImageId: !FindInMap [ StackConfig, MyDefault, ImageId ]
+  #     InstanceType: !FindInMap [ StackConfig, MyDefault, InstanceType ]
+  #     EbsOptimized: !FindInMap [ StackConfig, MyDefault, EbsOptimized]
+  #     BlockDeviceMappings:
+  #       - DeviceName: /dev/xvda
+  #         Ebs:
+  #           VolumeType: !FindInMap [ StackConfig, MyDefault, VolumeType]
+  #           VolumeSize: !FindInMap [ StackConfig, MyDefault, VolumeSize]
+  #           DeleteOnTermination: True
+##########
+  Work01:
     Type: AWS::EC2::Instance
     Properties:
       Tags:
       - Key: Name
-        Value: Web01
+        Value: Work01
       - Key: RunningOrStop
         Value: stop_everynight
-      # IamInstanceProfile:
+      IamInstanceProfile: !ImportValue Iam-ProfileEc2Common
       SecurityGroupIds:
-        - !ImportValue Sg-WebToDbSg
+        # - !ImportValue Sg-WebToDbSg
         - !ImportValue Sg-SgOutForPrivate
         - !ImportValue Sg-SgInForAll
       SubnetId: !ImportValue Vpc-PrivateSubnetA
@@ -269,6 +296,18 @@ Resources:
             VolumeType: !FindInMap [ StackConfig, MyDefault, VolumeType]
             VolumeSize: !FindInMap [ StackConfig, MyDefault, VolumeSize]
             DeleteOnTermination: True
+##########
+  Work01Record:
+    Type: AWS::Route53::RecordSetGroup
+    Properties:
+      HostedZoneId: !ImportValue CommonResources-MyPrivateHostedZone
+      Comment: A record for the Work01 private IP address.
+      RecordSets:
+        - Name: work01.my.local.
+          Type: A
+          TTL: 300
+          ResourceRecords:
+            - !GetAtt Work01.PrivateIp
 ################ SecurityGroup ################
   DummySgEc2:
     Type: AWS::EC2::SecurityGroup

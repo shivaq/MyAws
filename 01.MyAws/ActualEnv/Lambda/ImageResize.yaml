@@ -1,0 +1,87 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Lambda to play around'
+################### Metadata ####################
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      -
+        Label:
+          default: Lambda file settings
+        Parameters:
+          - LambdaBucketName
+          - LambdaFileName
+############## Parameters #################
+Parameters:
+  LambdaBucketName:
+    Description: S3 BucketName where the lambda file stored
+    Type: String
+    Default: shivaq-code-store
+  LambdaFileName:
+    Description: Lambda file name without zip
+    Type: String
+    Default: CreateThumbnail
+################ Resources ######################
+Resources:
+  CreateThumbnail:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: CreateThumbnail
+      Description: "CreateThumbnail for Image which stored in S3"
+      Role: !GetAtt RoleToCreateThumbnail.Arn
+      Handler: !Join
+          - ''
+          - - !Ref LambdaFileName
+            - '.lambda_handler'
+      Runtime: python3.6
+      Timeout: 600
+      Code:
+        S3Bucket: !Ref LambdaBucketName
+        S3Key: !Join
+            - ''
+            - - Lambda
+              - /Python/
+              - !Ref LambdaFileName
+              - .zip
+############## CloudWatchLogs ##############
+  CreateThumbnailLambdaLog:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Join
+          - ''
+          - - "/aws/lambda/"
+            - !Ref CreateThumbnail
+      RetentionInDays: 3
+############## IAM ##############
+  PolicyGetPutS3Objects4Lambda:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: CreateThumbnail
+      Description: CreateThumbnail
+      Path: /
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+            - logs:*
+            - s3:GetObject
+            - s3:PutObject
+            - s3:List*
+            Resource: "*"
+      Roles:
+        - !Ref RoleToCreateThumbnail
+  RoleToCreateThumbnail:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: RoleToCreateThumbnail
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - "sts:AssumeRole"
+      Path: "/"
