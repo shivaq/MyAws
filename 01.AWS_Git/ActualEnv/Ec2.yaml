@@ -1,0 +1,314 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Recordset & EC2(Bastion, Proxy, Ansible, Web)
+################### Parameters ###################
+Parameters:
+  KeyName:
+    Description: Name of an existing EC2 KeyPair to enable SSH access to the instances
+    Type: AWS::EC2::KeyPair::KeyName
+    MinLength: '1'
+    MaxLength: '64'
+    AllowedPattern: "[-_ a-zA-Z0-9]*"
+    ConstraintDescription: can contain only alphanumeric characters, spaces, dashes
+      and underscores.
+    Default: MyKey
+  # SSHFrom:
+  #   Description: Lockdown SSH access to the bastion host (default can be accessed
+  #     from anywhere)
+  #   Type: String
+  #   MinLength: '9'
+  #   MaxLength: '18'
+  #   Default: 0.0.0.0/0
+  #   AllowedPattern: "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})"
+  #   ConstraintDescription: must be a valid CIDR range of the form x.x.x.x/x.
+################### Mappings ###################
+Mappings:
+  StackConfig:
+    MyVpcAmazonDns:
+      CIDR: 10.0.0.2/32
+      # Red Hat Enterprise Linux 7.5 (HVM), SSD Volume Type 仮想化タイプ: hvm
+    MyDefault:
+      ImageId: ami-08847abae18baa040
+      InstanceType: t2.micro
+      EbsOptimized: False
+      VolumeType: gp2
+      VolumeSize: 10
+    PublicSubnetA:
+      CIDR: 10.0.0.0/24
+      AZ: ap-northeast-1a
+    # PublicSubnetC:
+    #   CIDR: 10.0.1.0/24
+    #   AZ: ap-northeast-1c
+    # ExternalElbSubnetA:
+    #   CIDR: 10.0.50.0/24
+    #   AZ: ap-northeast-1a
+    # ExternalElbSubnetC:
+    #   CIDR: 10.0.51.0/24
+    #   AZ: ap-northeast-1c
+    PrivateSubnetA:
+      CIDR: 10.0.100.0/24
+      AZ: ap-northeast-1a
+    # PrivateSubnetC:
+    #   CIDR: 10.0.101.0/24
+    #   AZ: ap-northeast-1c
+    # InternalElbSubnetA:
+    #   CIDR: 10.0.150.0/24
+    #   AZ: ap-northeast-1a
+    # InternalElbSubnetC:
+    #   CIDR: 10.0.151.0/24
+    #   AZ: ap-northeast-1c
+    DBSubnetA:
+      CIDR: 10.0.200.0/24
+      AZ: ap-northeast-1a
+    DBSubnetC:
+      CIDR: 10.0.201.0/24
+      AZ: ap-northeast-1c
+######################## Resources ########################
+Resources:
+################### RecordSet ###################
+  BastionRecord:
+    Type: AWS::Route53::RecordSetGroup
+    Properties:
+      HostedZoneId: !ImportValue Route53-MyPrivateHostedZone
+      Comment: A record for the Bastion private IP address.
+      RecordSets:
+        - Name: bastion.my.local.
+          Type: A
+          TTL: 300
+          ResourceRecords:
+            - !GetAtt Bastion.PrivateIp
+##########
+  ProxyRecord:
+    Type: AWS::Route53::RecordSetGroup
+    Properties:
+      HostedZoneId: !ImportValue Route53-MyPrivateHostedZone
+      Comment: A record for the Proxy private IP address.
+      RecordSets:
+        - Name: proxy.my.local.
+          Type: A
+          TTL: 300
+          ResourceRecords:
+            - !GetAtt Proxy.PrivateIp
+##########
+  WorkLin01Record:
+    Type: AWS::Route53::RecordSetGroup
+    Properties:
+      HostedZoneId: !ImportValue Route53-MyPrivateHostedZone
+      Comment: A record for the WorkLin01 private IP address.
+      RecordSets:
+        - Name: worklin01.my.local.
+          Type: A
+          TTL: 300
+          ResourceRecords:
+            - !GetAtt WorkLin01.PrivateIp
+##########
+  # AnsibleRecord:
+  #   Type: AWS::Route53::RecordSetGroup
+  #   Properties:
+  #     HostedZoneId: !ImportValue Route53-MyPrivateHostedZone
+  #     Comment: A record for the Ansible private IP address.
+  #     RecordSets:
+  #       - Name: ansible.my.local.
+  #         Type: A
+  #         TTL: 300
+  #         ResourceRecords:
+  #           - !GetAtt Ansible.PrivateIp
+##########
+  # Web01Record:
+  #   Type: AWS::Route53::RecordSetGroup
+  #   Properties:
+  #     HostedZoneId: !ImportValue Route53-MyPrivateHostedZone
+  #     Comment: A record for the Web01 private IP address.
+  #     RecordSets:
+  #       - Name: web01.my.local.
+  #         Type: A
+  #         TTL: 300
+  #         ResourceRecords:
+  #           - !GetAtt Web01.PrivateIp
+################ EC2 ################
+  Bastion:
+    Type: AWS::EC2::Instance
+    Properties:
+      Tags:
+      - Key: Name
+        Value: Bastion
+      - Key: RunningOrStop
+        Value: stop_everynight
+      # IamInstanceProfile:
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: true
+          DeviceIndex: 0
+          GroupSet:
+            - !ImportValue Sg-BastionSg
+            - !ImportValue Sg-SgOutForPublic
+            - !ImportValue Sg-SgInForAll
+          SubnetId: !ImportValue Vpc-PublicSubnetA
+      AvailabilityZone: !FindInMap [ StackConfig, PublicSubnetA, AZ]
+      SourceDestCheck: True
+      KeyName: !Ref KeyName
+      ImageId: !FindInMap [ StackConfig, MyDefault, ImageId ]
+      InstanceType: !FindInMap [ StackConfig, MyDefault, InstanceType ]
+      EbsOptimized: !FindInMap [ StackConfig, MyDefault, EbsOptimized]
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeType: !FindInMap [ StackConfig, MyDefault, VolumeType]
+            VolumeSize: !FindInMap [ StackConfig, MyDefault, VolumeSize]
+            DeleteOnTermination: True
+##########
+  Proxy:
+    Type: AWS::EC2::Instance
+    Properties:
+      Tags:
+      - Key: Name
+        Value: Proxy
+      - Key: RunningOrStop
+        Value: stop_everynight
+      - Key: LambdaTestTargetStart
+        Value: 4AM
+      # IamInstanceProfile:
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: true
+          DeviceIndex: 0
+          GroupSet:
+            - !ImportValue Sg-ProxySg
+            - !ImportValue Sg-SgOutForPublic
+            - !ImportValue Sg-SgInForAll
+          SubnetId: !ImportValue Vpc-PublicSubnetA
+      AvailabilityZone: !FindInMap [ StackConfig, PublicSubnetA, AZ]
+      # デフォルトは、インスタンス自身が送受信するトラフィックが、
+      # そのインスタンスのトラフィックではない場合に却下するための、「SourceDestCheck」
+      # をしている。しかし、NAT 的役割を担う場合、自分以外の送信先/元のトラフィックを送受信する必要がある。
+      SourceDestCheck: False
+      KeyName: !Ref KeyName
+      ImageId: !FindInMap [ StackConfig, MyDefault, ImageId ]
+      InstanceType: !FindInMap [ StackConfig, MyDefault, InstanceType ]
+      EbsOptimized: !FindInMap [ StackConfig, MyDefault, EbsOptimized]
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeType: !FindInMap [ StackConfig, MyDefault, VolumeType]
+            VolumeSize: !FindInMap [ StackConfig, MyDefault, VolumeSize]
+            DeleteOnTermination: True
+    #   # Initial setup for Cfn helper script
+    #   UserData:
+    #     Fn::Base64: !Sub |
+    #        #!/bin/bash -xe
+    #        yum update -y aws-cfn-bootstrap
+    #        /opt/aws/bin/cfn-init -v --stack ${AWS::StackId} --resource Proxy --configsets install_squid --region ${AWS::Region}
+    #        /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackId} --resource Proxy --region ${AWS::Region}
+    # # Define CreationPolicy for Proxy
+    # CreationPolicy:
+    #   ResourceSignal:
+    #     Count: 1
+    #     Timeout: PT5M
+    # # Define initial setup for Proxy
+    # Metadata:
+    #   AWS::CloudFormation::Init:
+    #     configSets:
+    #       install_squid:
+    #         - install_squid
+    #         # - put_squid_conf
+    #     install_squid:
+    #       packages:
+    #         yum:
+    #           squid: []
+    #       services:
+    #         sysvinit:
+    #           squid:
+    #             enabled: true
+    #             ensureRunning: true
+        # put_squid_conf:
+        #   sources:
+        #     /etc/squid/squid.conf: "https://s3.amazonaws.com/mybucket/myapp.tar.gz"
+##########
+  WorkLin01:
+    Type: AWS::EC2::Instance
+    Properties:
+      Tags:
+      - Key: Name
+        Value: WorkLin01
+      - Key: RunningOrStop
+        Value: stop_everynight
+      - Key: LambdaTestTargetStart
+        Value: 4AM
+      IamInstanceProfile: !ImportValue Iam-ProfileEc2Common
+      SecurityGroupIds:
+        # - !ImportValue Sg-WebToDbSg
+        - !ImportValue Sg-SgOutForPrivate
+        - !ImportValue Sg-SgInForAll
+      SubnetId: !ImportValue Vpc-PrivateSubnetA
+      AvailabilityZone: !FindInMap [ StackConfig, PrivateSubnetA, AZ]
+      SourceDestCheck: True
+      KeyName: !Ref KeyName
+      ImageId: !FindInMap [ StackConfig, MyDefault, ImageId ]
+      InstanceType: !FindInMap [ StackConfig, MyDefault, InstanceType ]
+      EbsOptimized: !FindInMap [ StackConfig, MyDefault, EbsOptimized]
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeType: !FindInMap [ StackConfig, MyDefault, VolumeType]
+            VolumeSize: !FindInMap [ StackConfig, MyDefault, VolumeSize]
+            DeleteOnTermination: True
+##########
+  # Ansible:
+  #   Type: AWS::EC2::Instance
+  #   Properties:
+  #     Tags:
+  #     - Key: Name
+  #       Value: Ansible
+  #     - Key: RunningOrStop
+  #       Value: stop_everynight
+  #     # IamInstanceProfile:
+  #     SecurityGroupIds:
+  #       - !ImportValue Sg-AnsibleSg
+  #       - !ImportValue Sg-SgOutForPrivate
+  #       - !ImportValue Sg-SgInForAll
+  #     SubnetId: !ImportValue Vpc-PrivateSubnetA
+  #     AvailabilityZone: !FindInMap [ StackConfig, PrivateSubnetA, AZ]
+  #     SourceDestCheck: True
+  #     KeyName: !Ref KeyName
+  #     ImageId: !FindInMap [ StackConfig, MyDefault, ImageId ]
+  #     InstanceType: !FindInMap [ StackConfig, MyDefault, InstanceType ]
+  #     EbsOptimized: !FindInMap [ StackConfig, MyDefault, EbsOptimized]
+  #     BlockDeviceMappings:
+  #       - DeviceName: /dev/xvda
+  #         Ebs:
+  #           VolumeType: !FindInMap [ StackConfig, MyDefault, VolumeType]
+  #           VolumeSize: !FindInMap [ StackConfig, MyDefault, VolumeSize]
+  #           DeleteOnTermination: True
+    # Metadata:
+    #   # Install ansible
+    #   AWS::CloudFormation::Init:
+    #     configSets:
+    #       commom_install:
+    #         - install_cfn
+    #       ansible_install:
+    #         - install_ansible
+##########
+  # Web01:
+  #   Type: AWS::EC2::Instance
+  #   Properties:
+  #     Tags:
+  #     - Key: Name
+  #       Value: Web01
+  #     - Key: RunningOrStop
+  #       Value: stop_everynight
+  #     IamInstanceProfile: !ImportValue Iam-ProfileEc2Common
+  #     SecurityGroupIds:
+  #       - !ImportValue Sg-WebToDbSg
+  #       - !ImportValue Sg-SgOutForPrivate
+  #       - !ImportValue Sg-SgInForAll
+  #     SubnetId: !ImportValue Vpc-PrivateSubnetA
+  #     AvailabilityZone: !FindInMap [ StackConfig, PrivateSubnetA, AZ]
+  #     SourceDestCheck: True
+  #     KeyName: !Ref KeyName
+  #     ImageId: !FindInMap [ StackConfig, MyDefault, ImageId ]
+  #     InstanceType: !FindInMap [ StackConfig, MyDefault, InstanceType ]
+  #     EbsOptimized: !FindInMap [ StackConfig, MyDefault, EbsOptimized]
+  #     BlockDeviceMappings:
+  #       - DeviceName: /dev/xvda
+  #         Ebs:
+  #           VolumeType: !FindInMap [ StackConfig, MyDefault, VolumeType]
+  #           VolumeSize: !FindInMap [ StackConfig, MyDefault, VolumeSize]
+  #           DeleteOnTermination: True

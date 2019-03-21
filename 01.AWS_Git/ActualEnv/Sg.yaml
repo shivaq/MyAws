@@ -1,0 +1,294 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: SecurityGroup
+################### Parameters ###################
+Parameters:
+  KakuninKun:
+    Type: String
+    Default: 121.118.178.141/32
+    Description: My Global Ip checked at KakuninKun
+################### Mappings ###################
+Mappings:
+  StackConfig:
+    MyVpcAmazonDns:
+      CIDR: 10.0.0.2/32
+      # Red Hat Enterprise Linux 7.5 (HVM), SSD Volume Type 仮想化タイプ: hvm
+    MyDefault:
+      ImageId: ami-08847abae18baa040
+      InstanceType: t2.micro
+      EbsOptimized: False
+      VolumeType: gp2
+      VolumeSize: 10
+    PublicSubnetA:
+      CIDR: 10.0.0.0/24
+      AZ: ap-northeast-1a
+    # PublicSubnetC:
+    #   CIDR: 10.0.1.0/24
+    #   AZ: ap-northeast-1c
+    # ExternalElbSubnetA:
+    #   CIDR: 10.0.50.0/24
+    #   AZ: ap-northeast-1a
+    # ExternalElbSubnetC:
+    #   CIDR: 10.0.51.0/24
+    #   AZ: ap-northeast-1c
+    PrivateSubnetA:
+      CIDR: 10.0.100.0/24
+      AZ: ap-northeast-1a
+    # PrivateWebSubnetC:
+    #   CIDR: 10.0.101.0/24
+    #   AZ: ap-northeast-1c
+    # InternalElbSubnetA:
+    #   CIDR: 10.0.150.0/24
+    #   AZ: ap-northeast-1a
+    # InternalElbSubnetC:
+    #   CIDR: 10.0.151.0/24
+    #   AZ: ap-northeast-1c
+    DBSubnetA:
+      CIDR: 10.0.200.0/24
+      AZ: ap-northeast-1a
+    DBSubnetC:
+      CIDR: 10.0.201.0/24
+      AZ: ap-northeast-1c
+######################## Resources ########################
+Resources:
+##########
+  SgInForAll:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: !ImportValue Vpc-MyVpc
+      GroupDescription: SG inbound rule for all EC2 instances
+      Tags:
+        - Key: Name
+          Value: SgInForAll
+      GroupName: SgInForAll
+      SecurityGroupIngress:
+        - IpProtocol: icmp
+          FromPort: 8
+          ToPort: -1
+          CidrIp: !ImportValue Vpc-MyVpcCidrBlock
+          Description: ping from MyVPC
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          SourceSecurityGroupId: !Ref BastionSg
+          Description: SSH from Bastion
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          SourceSecurityGroupId: !Ref AnsibleSg
+          Description: SSH from Ansible
+      SecurityGroupEgress:
+        - IpProtocol: icmp
+          FromPort: 0
+          ToPort: 0
+          CidrIp: 127.0.0.1/32
+          Description: loopback to workaround any
+##########
+  SgOutForPublic:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: !ImportValue Vpc-MyVpc
+      GroupDescription: SG inbound rule for all EC2 instances
+      Tags:
+        - Key: Name
+          Value: SgOutForPublic
+      GroupName: SgOutForPublic
+      # SecurityGroupIngress:
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !ImportValue Vpc-MyVpcCidrBlock
+          Description: SSH to MyVPC
+        - IpProtocol: tcp
+          FromPort: 8080
+          ToPort: 8080
+          SourceSecurityGroupId: !Ref ProxySg
+          Description: access to proxy
+        - IpProtocol: tcp
+          FromPort: 53
+          ToPort: 53
+          CidrIp: !FindInMap [ StackConfig, MyVpcAmazonDns, CIDR]
+          Description: DNS query to Amazon Dns
+        - IpProtocol: icmp
+          FromPort: 8
+          ToPort: -1
+          CidrIp: !ImportValue Vpc-MyVpcCidrBlock
+          Description: ping to MyVPC
+##########
+  BastionSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: !ImportValue Vpc-MyVpc
+      GroupDescription: Bastion allows to go anywhere in its VPC
+      Tags:
+        - Key: Name
+          Value: BastionSg
+      GroupName: BastionSg
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !Ref KakuninKun # 確認くん
+          Description: SSH from your PC
+      SecurityGroupEgress:
+        - IpProtocol: icmp
+          FromPort: 0
+          ToPort: 0
+          CidrIp: 127.0.0.1/32
+          Description: loopback to workaround any
+##########
+  ProxySg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: !ImportValue Vpc-MyVpc
+      GroupDescription: Accept 8080 from its vpc
+      Tags:
+        - Key: Name
+          Value: ProxySg
+      GroupName: ProxySg
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 8080
+          ToPort: 8080
+          SourceSecurityGroupId: !Ref SgInForAll
+          Description: proxy access from all EC2 instances
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+          Description: Out to internet via Internet Gateway
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+          Description: Out to internet via Internet Gateway
+##########
+# For Private
+##########
+##########
+  SgOutForPrivate:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: !ImportValue Vpc-MyVpc
+      GroupDescription: SG inbound rule for all EC2 instances
+      Tags:
+        - Key: Name
+          Value: SgOutForPrivate
+      GroupName: SgOutForPrivate
+      # SecurityGroupIngress:
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: !ImportValue Vpc-MyVpcCidrBlock
+          Description: Any port to MyVPC
+        - IpProtocol: tcp
+          FromPort: 53
+          ToPort: 53
+          CidrIp: !FindInMap [ StackConfig, MyVpcAmazonDns, CIDR]
+          Description: DNS query to Amazon Dns
+##########
+  AnsibleSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: !ImportValue Vpc-MyVpc
+      GroupDescription: Ansible issue order to anywhere in its VPC
+      Tags:
+        - Key: Name
+          Value: AnsibleSg
+      GroupName: AnsibleSg
+      # SecurityGroupIngress:
+      SecurityGroupEgress:
+        - IpProtocol: icmp
+          FromPort: 0
+          ToPort: 0
+          CidrIp: 127.0.0.1/32
+          Description: loopback to workaround any
+##########
+  WebToDbSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: !ImportValue Vpc-MyVpc
+      GroupDescription: Communicate with MySQL
+      Tags:
+        - Key: Name
+          Value: WebToDbSg
+      GroupName: WebToDbSg
+      # SecurityGroupIngress:
+      SecurityGroupEgress:
+        - IpProtocol: icmp
+          FromPort: 0
+          ToPort: 0
+          CidrIp: 127.0.0.1/32
+          Description: loopback to workaround any
+##########
+# For DB
+##########
+  MySQLSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: !ImportValue Vpc-MyVpc
+      GroupDescription: RDS that accept mysql access
+      Tags:
+      - Key: Name
+        Value: MySQLSg
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          SourceSecurityGroupId: !Ref WebToDbSg
+          Description: Inbound from Web servers with mysql
+################ SecurityGroup ################
+  DummySgEc2:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: !ImportValue Vpc-MyVpc
+      GroupDescription: DummySgEc2
+      Tags:
+        - Key: Name
+          Value: DummySgEc2
+      GroupName: DummySgEc2
+      SecurityGroupEgress:
+        - IpProtocol: icmp
+          FromPort: 0
+          ToPort: 0
+          CidrIp: 127.0.0.1/32
+          Description: loopback to workaround any
+################ Outputs ################
+Outputs:
+  SgInForAll:
+    Value: !Ref SgInForAll
+    Export:
+      Name: !Sub "${AWS::StackName}-SgInForAll"
+  SgOutForPublic:
+    Value: !Ref SgOutForPublic
+    Export:
+      Name: !Sub "${AWS::StackName}-SgOutForPublic"
+  BastionSg:
+    Value: !Ref BastionSg
+    Export:
+      Name: !Sub "${AWS::StackName}-BastionSg"
+  ProxySg:
+    Value: !Ref ProxySg
+    Export:
+      Name: !Sub "${AWS::StackName}-ProxySg"
+  SgOutForPrivate:
+    Value: !Ref SgOutForPrivate
+    Export:
+      Name: !Sub "${AWS::StackName}-SgOutForPrivate"
+  AnsibleSg:
+    Value: !Ref AnsibleSg
+    Export:
+      Name: !Sub "${AWS::StackName}-AnsibleSg"
+  WebToDbSg:
+    Value: !Ref WebToDbSg
+    Export:
+      Name: !Sub "${AWS::StackName}-WebToDbSg"
+  MySQLSg:
+    Value: !Ref MySQLSg
+    Export:
+      Name: !Sub "${AWS::StackName}-MySQLSg"
+  DummySgEc2:
+    Value: !Ref DummySgEc2
+    Export:
+      Name: !Sub "${AWS::StackName}-DummySgEc2"

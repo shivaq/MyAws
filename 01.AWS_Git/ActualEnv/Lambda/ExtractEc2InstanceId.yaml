@@ -1,0 +1,153 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Lambda to play around'
+#################################################
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      -
+        Label:
+          default: Set Tag key and value for Ec2 instances
+        Parameters:
+          - TagKeyToExtract
+          - TagValueToExtract
+      -
+        Label:
+          default: Lambda Schedule with CloudWatch Event
+        Parameters:
+          - LambdaExecutionSchedule
+          - RunOrNotRunLambda
+      -
+        Label:
+          default: Lambda file settings
+        Parameters:
+          - LambdaBucketName
+          - LambdaFileName
+    ParameterLabels:
+      RunOrNotRunLambda:
+        default: Do or not do...
+#################################################
+Parameters:
+  TagKeyToExtract:
+    Description: Tag key to extarct ec2 instance ids
+    Type: String
+    Default: TagKeyToExtract
+  TagValueToExtract:
+    Description: Tag value to extarct ec2 instance ids
+    Type: String
+    Default: TagValueToExtract
+  LambdaExecutionSchedule:
+    Description: When to execute the Lambda Function.
+    Type: String
+    Default: cron(0 0 * * ? *)
+  RunOrNotRunLambda:
+    Description: Run or not run the lambda function.
+    Type: String
+    Default: ENABLED
+    AllowedValues:
+      - ENABLED
+      - DISABLED
+  LambdaBucketName:
+    Description: S3 BucketName where the lambda file stored
+    Type: String
+    Default: shibaq-code-store
+  LambdaFileName:
+    Description: Lambda file name which stored in S3
+    Type: String
+    Default: extract_ec2_instance_id
+################ Lambda::Function ######################
+Resources:
+  ExtractEc2InstanceId:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: ExtractEc2InstanceId
+      Description: "Extract Ec2 instance id with a tag value"
+      Role: !GetAtt RoleToExtractEc2InstanceId.Arn
+      Handler: !Join
+          - ''
+          - - !Ref LambdaFileName
+            - '.lambda_handler'
+      Runtime: python3.6
+      Timeout: 300
+      Environment:
+        Variables:
+          TagKeyToExtract: !Ref TagKeyToExtract
+          TagValueToExtract: !Ref TagValueToExtract
+      Code:
+        S3Bucket: !Ref LambdaBucketName
+        S3Key: !Join
+            - ''
+            - - Lambda/
+              - !Ref LambdaFileName
+              - '.zip'
+  2ndVersion:
+    Type: AWS::Lambda::Version
+    Properties:
+      FunctionName: !Ref ExtractEc2InstanceId
+      Description: "A 2nd version of ExtractEc2InstanceId"
+  2ndVersionALias:
+    Type: AWS::Lambda::Alias
+    Properties:
+      FunctionName: !Ref ExtractEc2InstanceId
+      FunctionVersion: !GetAtt 2ndVersion.Version
+      Name: "2ndVersion"
+############## Grant pemission to run Lambda ##############
+  PermissionForEventsToInvokeExtractEc2InstanceId:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref ExtractEc2InstanceId
+      Action: "lambda:InvokeFunction"
+      Principal: "events.amazonaws.com"
+      SourceArn: !GetAtt InvokeExtractEc2InstanceIdBeforeLeaveHome.Arn
+      SourceAccount: !Ref AWS::AccountId
+############## Schedule to invoke lambda ##############
+  InvokeExtractEc2InstanceIdBeforeLeaveHome:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: InvokeExtractEc2InstanceIdBeforeLeaveHome
+      Description: Test
+      ScheduleExpression: !Ref LambdaExecutionSchedule
+      State: !Ref RunOrNotRunLambda
+      Targets:
+        - Arn: !GetAtt ExtractEc2InstanceId.Arn
+          Id: ExtractEc2InstanceId
+############## CloudWatchLogs ##############
+  ExtractEc2InstanceIdLambdaLog:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Join
+          - ''
+          - - "/aws/lambda/"
+            - !Ref ExtractEc2InstanceId
+      RetentionInDays: 3
+############## Role ##############
+  PolicyExtractEc2InstanceId:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: ExtractEc2InstanceId
+      Description: ExtractEc2InstanceId
+      Path: /
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+            - logs:*
+            - ec2:Describe*
+            Resource: "*"
+      Roles:
+        - !Ref RoleToExtractEc2InstanceId
+  RoleToExtractEc2InstanceId:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: RoleToExtractEc2InstanceId
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - "sts:AssumeRole"
+      Path: "/"

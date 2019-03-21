@@ -1,0 +1,151 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Lambda to play around'
+#################################################
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      -
+        Label:
+          default: This tag value are keep_running or stop_everynight
+        Parameters:
+          - RunningOrStop
+      -
+        Label:
+          default: Lambda Schedule in the morning
+        Parameters:
+          - LambdaExecutionScheduleMorning
+          - DoesExecuteLambdaAM
+      -
+        Label:
+          default: Lambda Schedule in the midnight
+        Parameters:
+          - LambdaExecutionScheduleMidnight
+          - DoesExecuteLambdaPM
+      -
+        Label:
+          default: Lambda file settings
+        Parameters:
+          - LambdaBucketName
+          - LambdaFileName
+    ParameterLabels:
+      DoesExecuteLambda:
+        default: Do or not do...
+#################################################
+Parameters:
+  RunningOrStop:
+    Description: Tag key for EC2 which determines if it's stopped at night
+    Type: String
+    Default: RunningOrStop
+  LambdaExecutionScheduleMorning:
+    Description: When to stop EC2 instances in the morning.
+    Type: String
+    Default: cron(0 0 * * ? *)
+  DoesExecuteLambdaAM:
+    Description: Run or not run lambda function.
+    Type: String
+    Default: ENABLED
+    AllowedValues:
+      - ENABLED
+      - DISABLED
+  LambdaExecutionScheduleMidnight:
+    Description: When to stop EC2 instances in the midnight.
+    Type: String
+    Default: cron(0 17 * * ? *)
+  DoesExecuteLambdaPM:
+    Description: Run or not run lambda function.
+    Type: String
+    Default: ENABLED
+    AllowedValues:
+      - ENABLED
+      - DISABLED
+  LambdaBucketName:
+    Description: S3 BucketName where the lambda file stored
+    Type: String
+    Default: shibaq-code-store
+  LambdaFileName:
+    Description: Lambda file name which stored in S3
+    Type: String
+    Default: stop_ec2_instances
+################ Lambda::Function ######################
+Resources:
+  StopEc2:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: StopEc2
+      Description: "Stop designated EC2 instances"
+      Role: !ImportValue Iam-RoleToStopEc2Arn
+      Handler: !Join
+          - ''
+          - - !Ref LambdaFileName
+            - '.lambda_handler'
+      Runtime: python3.6
+      Timeout: 300
+      Environment:
+        Variables:
+          RunningOrStop: !Ref RunningOrStop
+      Code:
+        S3Bucket: !Ref LambdaBucketName
+        S3Key: !Join
+            - ''
+            - - Lambda/
+              - !Ref LambdaFileName
+              - '.zip'
+  FirstVersion:
+    Type: AWS::Lambda::Version
+    Properties:
+      FunctionName: !Ref StopEc2
+      Description: "A default version of StopEc2"
+  FirstVersionALias:
+    Type: AWS::Lambda::Alias
+    Properties:
+      FunctionName: !Ref StopEc2
+      FunctionVersion: !GetAtt FirstVersion.Version
+      Name: "DefaultVersion"
+############## Grant pemission to run Lambda ##############
+  PermissionForEventsToInvokeStopEc2BeforeLeaveHome:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref StopEc2
+      Action: "lambda:InvokeFunction"
+      Principal: "events.amazonaws.com"
+      SourceArn: !GetAtt InvokeStopEc2BeforeLeaveHome.Arn
+      SourceAccount: !Ref AWS::AccountId
+  PermissionForEventsToInvokeStopEc2BeforeSleep:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref StopEc2
+      Action: "lambda:InvokeFunction"
+      Principal: "events.amazonaws.com"
+      SourceArn: !GetAtt InvokeStopEc2BeforeSleep.Arn
+      SourceAccount: !Ref AWS::AccountId
+############## Schedule to invoke lambda ##############
+  InvokeStopEc2BeforeLeaveHome:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: InvokeStopEc2BeforeLeaveHome
+      Description: Stop designated EC2 instances
+      ScheduleExpression: !Ref LambdaExecutionScheduleMorning
+      State: !Ref DoesExecuteLambdaAM
+      Targets:
+        - Arn: !GetAtt StopEc2.Arn
+          Id: StopEc2
+  InvokeStopEc2BeforeSleep:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: InvokeStopEc2BeforeSleep
+      Description: Stop designated EC2 instances
+      ScheduleExpression: !Ref LambdaExecutionScheduleMidnight
+      State: !Ref DoesExecuteLambdaPM
+      Targets:
+        - Arn: !GetAtt StopEc2.Arn
+          Id: StopEc2
+############## CloudWatchLogs ##############
+  StopEc2LambdaLog:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Join
+          - ''
+          - - "/aws/lambda/"
+            - !Ref StopEc2
+      RetentionInDays: 3

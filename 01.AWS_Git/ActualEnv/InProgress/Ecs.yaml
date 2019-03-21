@@ -1,0 +1,153 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Batch practice
+# #################################################
+# Metadata:
+#   AWS::CloudFormation::Interface:
+#     ParameterGroups:
+#       -
+#         Label:
+#           default: This tag value are keep_running or stop_everynight
+#         Parameters:
+#           - RunningOrStop
+#       -
+#         Label:
+#           default: Lambda Schedule in the morning
+#         Parameters:
+#           - LambdaExecutionScheduleMorning
+#           - DoesExecuteLambdaAM
+#       -
+#         Label:
+#           default: Lambda Schedule in the midnight
+#         Parameters:
+#           - LambdaExecutionScheduleMidnight
+#           - DoesExecuteLambdaPM
+#       -
+#         Label:
+#           default: Lambda file settings
+#         Parameters:
+#           - LambdaBucketName
+#           - LambdaFileName
+#     ParameterLabels:
+#       DoesExecuteLambda:
+#         default: Do or not do...
+#################################################
+Parameters:
+  SubnetIds:
+    Description: Subnets For ComputeEnvironment
+    Type: List<AWS::EC2::Subnet::Id>
+    Default: subnet-xxxxxxxx,subnet-yyyyyyyy
+  SecurityGroupIds:
+    Description: SecurityGroups For ComputeEnvironment
+    Type: List<AWS::EC2::SecurityGroup::Id>
+    Default: sg-zzzzzzzz
+  ContainerImage:
+    Description: Uri of container image to use in ECS
+    Type: String
+    Default: xxxxxxxxxxxx.dkr.ecr.ap-northeast-1.amazonaws.com/sample-aws-batch-repo
+  # あらかじめ、key pairを作成しておいてください
+  KeyPair:
+    Description: key pair
+    Type: String
+    Default: sample_key
+
+Resources:
+  ####### IAM #######
+  # ECSインスタンスを実行するrole
+  ecsInstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - ec2.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceforEC2Role
+        - arn:aws:iam::aws:policy/AmazonEC2FullAccess
+        - arn:aws:iam::aws:policy/AmazonECS_FullAccess
+        - arn:aws:iam::aws:policy/CloudWatchLogsFullAccess
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+      Path: "/"
+  # Set InstanceProfile
+  ecsInstanceProfile:
+    Type: "AWS::IAM::InstanceProfile"
+    Properties:
+      Roles:
+        - !Ref ecsInstanceRole
+
+  # AWS Batchを実行するrole
+  AWSBatchServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - batch.amazonaws.com
+            - ecs-tasks.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSBatchServiceRole
+      Path: "/service-role/"
+
+  ####### ComputeEnvironment #######
+  SampleComputeEnv:
+    Type: "AWS::Batch::ComputeEnvironment"
+    Properties:
+      Type: MANAGED
+      # 作成したIAMから取得
+      ServiceRole: !GetAtt AWSBatchServiceRole.Arn
+      ComputeEnvironmentName: sample-batch-compute-env
+      ComputeResources:
+        Ec2KeyPair: !Ref KeyPair
+        # 最大vcpu数、最大インスタンス数となります
+        MaxvCpus: 256
+        # 最小vcpu 0にすると自動でインスタンスをterminateしてくれる
+        MinvCpus: 0
+        # 起動するインスタンスの希望するvCPUの数
+        DesiredvCpus: 1
+        SecurityGroupIds: !Ref SecurityGroupIds
+        Type: EC2
+        Subnets: !Ref SubnetIds
+        # 作成したVPCから取得
+        InstanceRole: !GetAtt ecsInstanceProfile.Arn
+        InstanceTypes:
+          # 使用するインスタンスタイプ、optimalならおまかせ
+          - optimal
+        Tags: {"Name": "Batch Instance - sample"}
+      State: ENABLED
+
+  SampleJobQueue:
+    Type: AWS::Batch::JobQueue
+    Properties:
+      ComputeEnvironmentOrder:
+        - Order: 1
+          ComputeEnvironment: !Ref SampleComputeEnv
+      State: ENABLED
+      # jobの優先順位
+      Priority: 1
+      JobQueueName: sample-batch-queue
+
+  SampleJobDefinition:
+    Type: AWS::Batch::JobDefinition
+    Properties:
+      Type: container
+      JobDefinitionName: sample-batch-definition
+      ContainerProperties:
+        Command:
+          - sh
+          - /usr/local/init.sh
+        # memoryの上限
+        Memory: 4048
+        Vcpus: 2
+        Image: Image: !Ref ContainerImage
+      RetryStrategy:
+        Attempts: 1
